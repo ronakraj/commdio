@@ -20,10 +20,6 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         if message.lower() == 'quit':
             break
         s.sendall(message.encode())
-        data = s.recv(1024)
-        
-        if not data:
-            break
-        print('Received:', data.decode())
+        #data = s.recv(1024)
 
         time.sleep(0.01)

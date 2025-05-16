@@ -40,19 +40,6 @@ def signal_handler(sig, frame):
 # Catch ctrl+c to exit program at any time
 signal.signal(signal.SIGINT, signal_handler)
 
-def read(client, buf):
-    """
-    Read client messages and ensure there is a "\n" at the end of each message
-    """
-    while True:
-        buf += client.recv(2024)
-        pos = buf.find(b'\n')
-        if pos > -1:
-            message = buf[:pos].decode("utf-8")
-            buf = buf[pos+1:]
-            break
-    return buf, message
-
 def receive(client, addr):
     global clients
 
@@ -70,6 +57,7 @@ def receive(client, addr):
                 data_binary = bin(int.from_bytes(data.encode(), 'big'))
                 fsk_signal = generate_fsk_signal(data_binary)
                 play_audio(fsk_signal)
+                print(f"Sent over air: {data}")
 
         except Exception as ex:
             print(f"Exception: {ex}")
