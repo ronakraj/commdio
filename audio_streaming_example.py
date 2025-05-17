@@ -1,21 +1,9 @@
-import numpy as np
 import sounddevice as sd
-import socket
-import signal
-import sys
-import time
-from threading import Thread
-from scipy.fft import fft
+import numpy as np
 import queue
+import threading
 
-# Signal processing global variables
-sample_rate = 44100
-bit_duration = 0.01
-freq_high = 2000
-freq_low = 1000
-chunk_size = int(bit_duration * 10 * 8)
-
-def generate_sine_wave(frequency, duration=bit_duration, sample_rate=sample_rate):
+def generate_sine_wave(frequency, duration, sample_rate=44100):
     """
     Generates a sine wave.
 
@@ -32,7 +20,7 @@ def generate_sine_wave(frequency, duration=bit_duration, sample_rate=sample_rate
     return sine_wave
 
 def fsk_demodulate(received_signal, freq_high, freq_low, bit_duration, 
-                   sample_rate=sample_rate, threshold_factor=0.55):
+                   sample_rate=44100, threshold_factor=0.5):
     """
     FSK demodulates a received signal.
 
@@ -48,18 +36,17 @@ def fsk_demodulate(received_signal, freq_high, freq_low, bit_duration,
     Returns:
         str: The demodulated bit string.
     """
-
     demodulated_bits = ""
     num_bits = int(len(received_signal) / (sample_rate * bit_duration))
-    
+    print(num_bits)
     for i in range(num_bits):
         start_sample = int(i * sample_rate * bit_duration)
         end_sample = int((i + 1) * sample_rate * bit_duration)
         bit_signal = received_signal[start_sample:end_sample]
 
         # Calculate the energy at each frequency.  More robust than just one sample.
-        energy_high = np.sum(np.abs(bit_signal * generate_sine_wave(freq_high)))
-        energy_low = np.sum(np.abs(bit_signal * generate_sine_wave(freq_low)))
+        energy_high = np.sum(np.abs(bit_signal * generate_sine_wave(freq_high, bit_duration, sample_rate)))
+        energy_low = np.sum(np.abs(bit_signal * generate_sine_wave(freq_low, bit_duration, sample_rate)))
 
         # Use a threshold relative to the *sum* of the energies.
         threshold = (energy_high + energy_low) * threshold_factor
@@ -95,9 +82,7 @@ def audio_callback(indata, frames, time, status, audio_queue, freq_high, freq_lo
     except queue.Full:
         print("Queue full") 
 
-def stream_audio(sample_rate=sample_rate, chunk_size=chunk_size, 
-                 freq_high=freq_high, freq_low=freq_low, 
-                 bit_duration=bit_duration):
+def stream_audio(sample_rate=44100, chunk_size=1024, freq_high=2000, freq_low=1000, bit_duration=0.1):
     """
     Streams audio from the default microphone in a continuous loop.
 
@@ -108,21 +93,11 @@ def stream_audio(sample_rate=sample_rate, chunk_size=chunk_size,
         freq_low (float): Frequency for the '0' bit in Hz.
         bit_duration (float): Duration of each bit in seconds.
     """
-
     audio_queue = queue.Queue(maxsize=100)  # Create a queue to hold audio data
     try:
         # Open the audio stream.  Importantly, use a non-blocking stream.
         stream = sd.InputStream(samplerate=sample_rate, blocksize=chunk_size,
-                                channels=1, callback=(lambda indata, frames, 
-                                                      time, status: 
-                                                      audio_callback(indata, 
-                                                                     frames, time, 
-                                                                     status, 
-                                                                     audio_queue, 
-                                                                     freq_high, 
-                                                                     freq_low,
-                                                                     bit_duration, 
-                                                                     sample_rate)))
+                                channels=1, callback=(lambda indata, frames, time, status: audio_callback(indata, frames, time, status, audio_queue, freq_high, freq_low, bit_duration, sample_rate)))
         stream.start() # Start the stream.
 
         print("Audio stream started.  Press Ctrl+C to stop.")
@@ -130,7 +105,13 @@ def stream_audio(sample_rate=sample_rate, chunk_size=chunk_size,
         while True:
             try:
                 audio_data = audio_queue.get(timeout=1)  # Get data from the queue.
-                
+                # Now you can process the audio_data.  For example, you could:
+                # 1.  Analyze it (e.g., for volume, frequency content).
+                # 2.  Send it over a network.
+                # 3.  Save it to a buffer or file.
+                # 4.  Pass it to a machine learning model.
+                # print(f"Received audio data of shape {audio_data.shape}") # uncomment this line to see the shape of the audio data.
+
                 # Demodulate the audio data
                 demodulated_bits = fsk_demodulate(audio_data, freq_high, 
                                                   freq_low, bit_duration, 
@@ -138,6 +119,11 @@ def stream_audio(sample_rate=sample_rate, chunk_size=chunk_size,
                 print(f"Demodulated bits: {demodulated_bits}")
 
             except queue.Empty:
+                # This exception will be raised if the queue is empty after the timeout.
+                # It's normal to get this occasionally, especially if the processing
+                # in this loop is slow.  You might want to add a small sleep here
+                # to reduce CPU usage if you're not doing much processing.
+                # time.sleep(0.01)
                 pass # No operation
             except KeyboardInterrupt:
                 print("Stopping audio stream...")
@@ -148,4 +134,10 @@ def stream_audio(sample_rate=sample_rate, chunk_size=chunk_size,
         print(f"Error streaming audio: {e}")
 
 if __name__ == "__main__":
+    # Set the desired sample rate and chunk size.  These are common values.
+    sample_rate = 44100  # Hz
+    chunk_size = 4410*100  # Frames
+    freq_high = 2000
+    freq_low = 1000
+    bit_duration = 0.1
     stream_audio(sample_rate, chunk_size, freq_high, freq_low, bit_duration)
