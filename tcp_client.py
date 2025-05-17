@@ -17,9 +17,11 @@ with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
     s.connect((HOST, PORT))
     while True:
         message = input("Enter message to send (or 'quit' to exit): ")
+
         if message.lower() == 'quit':
             break
-        s.sendall(message.encode())
-        #data = s.recv(1024)
+        
+        else:
+            s.sendall(message.encode())
 
         time.sleep(0.01)
